@@ -1,0 +1,26 @@
+modLoader="javafml"
+loaderVersion="[43,)"
+license="ARR"
+# issueTrackerURL="https://change.me.to.your.issue.tracker.example.invalid/"
+[[mods]]
+modId="stats"
+version="${file.jarVersion}"
+displayName="Stats"
+# logoFile="stats.png"
+
+displayTest="MATCH_VERSION"
+description='''Lorem Ipsum'''
+
+[[dependencies.stats]]
+    modId="forge"
+    mandatory=true
+    versionRange="[43.2.11,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.stats]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.19.2,1.20)"
+    ordering="NONE"
+    side="BOTH"
