@@ -11,6 +11,6 @@ public interface RefsDB extends Transactional<RefsDB> {
 
 //    @BatchChunkSize(5000)
     @SqlBatch("insert into refs(modId, amount, owner, member, type) values (:mid, :amount, :owner, :member, :type)")
-    void insert(@Bind("mid") String modId, @BindBean Iterable<Reference> references, @Bind("amount") Iterable<AtomicInteger> amount);
+    void insert(@Bind("mid") int modId, @BindBean Iterable<Reference> references, @Bind("amount") Iterable<AtomicInteger> amount);
 
 }

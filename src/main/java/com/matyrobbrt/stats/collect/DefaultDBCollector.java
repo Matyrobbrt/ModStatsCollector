@@ -1,5 +1,8 @@
 package com.matyrobbrt.stats.collect;
 
+import com.matyrobbrt.stats.db.InheritanceDB;
+import com.matyrobbrt.stats.db.InheritanceEntry;
+import com.matyrobbrt.stats.db.ModIDsDB;
 import com.matyrobbrt.stats.db.Reference;
 import com.matyrobbrt.stats.db.RefsDB;
 import com.matyrobbrt.stats.db.Type;
@@ -27,17 +30,28 @@ public final class DefaultDBCollector implements Collector {
     private final String modId;
     private final Jdbi jdbi;
     private final Remapper remapper;
+    private final boolean collectInheritance;
 
     private final Map<Reference, AtomicInteger> count = new LinkedHashMap<>();
+    private final List<InheritanceEntry> inheritance = new ArrayList<>();
 
-    public DefaultDBCollector(String modId, Jdbi jdbi, Remapper remapper) {
+    public DefaultDBCollector(String modId, Jdbi jdbi, Remapper remapper, boolean collectInheritance) {
         this.modId = modId;
         this.jdbi = jdbi;
         this.remapper = remapper;
+        this.collectInheritance = collectInheritance;
     }
 
     @Override
     public void accept(String modId, ClassNode clazz) {
+        if (collectInheritance && !clazz.name.endsWith("package-info")) {
+            inheritance.add(new InheritanceEntry(
+                    clazz.name, clazz.superName,
+                    clazz.interfaces, clazz.methods.stream()
+                    .map(method -> remapper.remapMethod(method.name) + method.desc)
+                    .toArray(String[]::new)
+            ));
+        }
     }
 
     @Override
@@ -64,7 +78,9 @@ public final class DefaultDBCollector implements Collector {
     @Override
     public void commit() {
         synchronized (jdbi) {
-            jdbi.useExtension(RefsDB.class, d -> d.insert(modId, count.keySet(), count.values()));
+            final int id = jdbi.withExtension(ModIDsDB.class, db -> db.get(modId));
+            jdbi.useExtension(RefsDB.class, d -> d.insert(id, count.keySet(), count.values()));
+            jdbi.useExtension(InheritanceDB.class, db -> db.insert(id, inheritance));
         }
     }
 

@@ -55,10 +55,15 @@ public class ModCollector {
             }
         }
 
-        for (final FilePointer filePointer : mf.files) {
-            final File file = api.getHelper().getModFile(filePointer.projectID, filePointer.fileID).orElseThrow();
+        for (final File file : api.getHelper()
+                .getFiles(mf.files.stream().mapToInt(FilePointer::fileID).toArray())
+                .orElseThrow()) {
             considerFile(file);
         }
+    }
+
+    public void considerFile(int projectId, int fileId) throws CurseForgeException, IOException {
+        considerFile(api.getHelper().getModFile(projectId, fileId).orElseThrow());
     }
 
     public void considerFile(File file) throws IOException {

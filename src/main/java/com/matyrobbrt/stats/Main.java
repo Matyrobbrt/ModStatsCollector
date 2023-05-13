@@ -3,10 +3,10 @@ package com.matyrobbrt.stats;
 import com.matyrobbrt.stats.collect.CollectorRule;
 import com.matyrobbrt.stats.collect.DefaultDBCollector;
 import com.matyrobbrt.stats.collect.StatsCollector;
+import com.matyrobbrt.stats.util.MappingUtils;
 import com.matyrobbrt.stats.util.Remapper;
 import io.github.matyrobbrt.curseforgeapi.CurseForgeAPI;
 import io.github.matyrobbrt.curseforgeapi.util.Utils;
-import net.minecraftforge.srgutils.IMappingFile;
 import org.flywaydb.core.Flyway;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.argument.AbstractArgumentFactory;
@@ -18,7 +18,6 @@ import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 
-import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Types;
@@ -29,17 +28,18 @@ public class Main {
     public static final CurseForgeAPI API = Utils.rethrowSupplier(() -> CurseForgeAPI.builder()
             .apiKey(System.getenv("CF_TOKEN"))
             .build()).get();
-    public static final IMappingFile MAPPINGS = Utils.rethrowSupplier(() -> IMappingFile.load(new File("mappings.srg"))).get();
 
     public static void main(String[] args) throws Exception {
-        final Jdbi jdbi = createDatabaseConnection("atm7sky");
+        final Jdbi jdbi = createDatabaseConnection("atm8new");
 
         final ModCollector collector = new ModCollector(API);
 
-        // collector.fromModpack(520914, 4504859); // ATM8
-        collector.fromModpack(655739, 4497267); // ATM7Sky
+        collector.fromModpack(520914, 4504859); // ATM8
+        // collector.fromModpack(655739, 4497267); // ATM7Sky
 
-        final Remapper remapper = Remapper.fromMappings(MAPPINGS);
+        // collector.considerFile(238222, 4494410); // JEI
+
+        final Remapper remapper = Remapper.fromMappings(MappingUtils.srgToMoj("1.19.2"));
 
         StatsCollector.collect(
                 collector.getJarsToProcess(),
@@ -70,7 +70,7 @@ public class Main {
                         return false;
                     }
                 },
-                (mid) -> new DefaultDBCollector(mid, jdbi, remapper)
+                (mid) -> new DefaultDBCollector(mid, jdbi, remapper, false)
         );
     }
 

@@ -67,7 +67,6 @@ public class StatsCollector {
                 @Override
                 public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
                     owner.visit(version, access, name, signature, superName, interfaces);
-                    collector.accept(modId, owner);
                 }
 
                 @Override
@@ -103,6 +102,7 @@ public class StatsCollector {
                 public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
                     final MethodNode node = new MethodNode(access, name, descriptor, signature, exceptions);
                     final boolean isInit = name.equals("<init>");
+                    owner.methods.add(node);
                     return new MethodVisitor(Opcodes.ASM9, node) {
 
                         @Override
@@ -137,6 +137,12 @@ public class StatsCollector {
                             }
                         }
                     };
+                }
+
+                @Override
+                public void visitEnd() {
+                    collector.accept(modId, owner);
+                    owner.methods.clear();
                 }
             };
 
