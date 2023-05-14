@@ -22,7 +22,7 @@ eclipse
 run
 cfCache/
 logs/
-metabase/
+/metabase/
 .env
 mappings/
 meta/

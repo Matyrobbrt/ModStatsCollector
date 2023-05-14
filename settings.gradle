@@ -13,3 +13,5 @@ pluginManagement {
     }
 }
 rootProject.name = 'stats'
+
+include(':metabase-api')

@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public final class DefaultDBCollector implements Collector {
-    private final String modId;
+    private final ModPointer mod;
     private final Jdbi jdbi;
     private final Remapper remapper;
     private final boolean collectInheritance;
@@ -35,8 +35,8 @@ public final class DefaultDBCollector implements Collector {
     private final Map<Reference, AtomicInteger> count = new LinkedHashMap<>();
     private final List<InheritanceEntry> inheritance = new ArrayList<>();
 
-    public DefaultDBCollector(String modId, Jdbi jdbi, Remapper remapper, boolean collectInheritance) {
-        this.modId = modId;
+    public DefaultDBCollector(ModPointer mod, Jdbi jdbi, Remapper remapper, boolean collectInheritance) {
+        this.mod = mod;
         this.jdbi = jdbi;
         this.remapper = remapper;
         this.collectInheritance = collectInheritance;
@@ -78,7 +78,7 @@ public final class DefaultDBCollector implements Collector {
     @Override
     public void commit() {
         synchronized (jdbi) {
-            final int id = jdbi.withExtension(ModIDsDB.class, db -> db.get(modId));
+            final int id = jdbi.withExtension(ModIDsDB.class, db -> db.get(mod.getModId(), mod.getProjectId()));
             jdbi.useExtension(RefsDB.class, d -> d.insert(id, count.keySet(), count.values()));
             jdbi.useExtension(InheritanceDB.class, db -> db.insert(id, inheritance));
         }

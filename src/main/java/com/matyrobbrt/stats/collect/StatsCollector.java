@@ -1,5 +1,9 @@
 package com.matyrobbrt.stats.collect;
 
+import com.matyrobbrt.stats.db.InheritanceDB;
+import com.matyrobbrt.stats.db.ModIDsDB;
+import com.matyrobbrt.stats.db.ProjectsDB;
+import com.matyrobbrt.stats.db.RefsDB;
 import cpw.mods.jarhandling.SecureJar;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
@@ -17,22 +21,51 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @SuppressWarnings("DuplicatedCode")
 public class StatsCollector {
-    public static void collect(Map<String, SecureJar> jars, CollectorRule rule, Function<String, Collector> collectorFactory) throws InterruptedException, ExecutionException {
-        jars.entrySet().removeIf(entry -> !rule.shouldCollect(entry.getKey()));
-        final List<Collector> collectors = new CopyOnWriteArrayList<>();
+    public static void collect(Map<ModPointer, SecureJar> jars, CollectorRule rule, ProjectsDB projects, InheritanceDB inheritance, RefsDB refs, ModIDsDB modIDsDB, Function<ModPointer, Collector> collectorFactory, ProgressMonitor monitor) throws InterruptedException, ExecutionException {
+        jars.entrySet().removeIf(entry -> !rule.shouldCollect(entry.getKey().getModId()));
+
+        projects.insert(0, 0); // Yay not null primary keys
+
+        final Set<ModPointer> keptMods = new HashSet<>(); // Mods in this set shall not be deleted initially because they will not be requeried
+        projects.useTransaction(transactional -> jars.keySet().removeIf(modPointer -> {
+            if (modPointer.getProjectId() == 0) return false;
+            final var oldFileId = transactional.getFileId(modPointer.getProjectId());
+            if (Objects.equals(oldFileId, modPointer.getFileId())) { // No need to re-calculate if we already did
+                keptMods.add(modPointer);
+                return true;
+            }
+            transactional.insert(modPointer.getProjectId(), modPointer.getFileId());
+            return false;
+        }));
+
+        final Set<Integer> keptModsId = modIDsDB.inTransaction(transactional -> keptMods.stream()
+                .map(pointer -> transactional.get(pointer.getModId(), pointer.getProjectId()))
+                .collect(Collectors.toSet()));
+        inheritance.delete(inheritance.getAllMods().stream()
+                .filter(Predicate.not(keptModsId::contains))
+                .toList());
+        refs.delete(refs.getAllMods().stream()
+                .filter(Predicate.not(keptModsId::contains))
+                .toList());
+
+        System.out.println("Found " + jars.size() + " mods to recollect information on.");
+
         final var executor = Executors.newFixedThreadPool(5, n -> {
             final Thread thread = new Thread(n);
             thread.setUncaughtExceptionHandler((t, e) -> {
@@ -43,12 +76,9 @@ public class StatsCollector {
             return thread;
         });
         final List<Callable<Object>> callables = new ArrayList<>();
-        final var count = new AtomicInteger();
         for (final var entry : jars.entrySet()) {
             callables.add(() -> {
-                final Collector col = collectorFactory.apply(entry.getKey());
-                collectors.add(col);
-                collect(count, jars.size(), entry.getKey(), entry.getValue(), rule, col);
+                collect(jars.size(), entry.getKey().getModId(), entry.getValue(), rule, collectorFactory.apply(entry.getKey()), monitor);
                 return null;
             });
         }
@@ -59,7 +89,7 @@ public class StatsCollector {
         }
     }
 
-    private static void collect(AtomicInteger count, int total, String modId, SecureJar jar, CollectorRule rule, Collector collector) throws IOException {
+    private static void collect(int total, String modId, SecureJar jar, CollectorRule rule, Collector collector, ProgressMonitor monitor) throws IOException {
         try (final Stream<Path> classes = Files.find(jar.getRootPath(), Integer.MAX_VALUE, (path, basicFileAttributes) -> path.getFileName().toString().endsWith(".class"))) {
             final ClassVisitor visitor = new ClassVisitor(Opcodes.ASM9) {
                 final ClassNode owner = new ClassNode();
@@ -157,7 +187,7 @@ public class StatsCollector {
             }
         }
         collector.commit();
-        System.out.println("Finished scanning mod: " + modId + " (" + count.incrementAndGet() + "/" + total + ")");
+        monitor.completedMod(modId, total);
     }
 
     public static final class ExitException extends RuntimeException {

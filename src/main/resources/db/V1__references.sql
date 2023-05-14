@@ -1,16 +1,24 @@
+create table projects
+(
+    projectId int not null primary key,
+    fileId    int not null
+);
+
 create table modids
 (
-    modId varchar(63) not null primary key,
-    id    serial unique
+    modId     varchar(63) not null,
+    projectId int         not null references projects(projectId),
+    id        serial unique,
+    constraint modids_pk primary key (modId, projectId)
 );
 
 create table refs
 (
-    modId  int      not null references modids (id),
-    amount int      not null,
-    owner  text     not null,
-    member text,
-    type   smallint not null,
+    modId     int      not null references modids (id),
+    amount    int      not null,
+    owner     text     not null,
+    member    text,
+    type      smallint not null,
     constraint references_pk primary key (modId, owner, member, type)
 );
 

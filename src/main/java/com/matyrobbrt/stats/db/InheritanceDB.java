@@ -3,9 +3,18 @@ package com.matyrobbrt.stats.db;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindBean;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
+import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.transaction.Transactional;
 
+import java.util.List;
+
 public interface InheritanceDB extends Transactional<InheritanceDB> {
-    @SqlBatch("insert into inheritance(modId, class, super, interfaces, methods) values (:mid, :clazz, :superClass, :interfaces, :methods)")
-    void insert(@Bind("mid") int modId, @BindBean Iterable<InheritanceEntry> entries);
+    @SqlBatch("insert into inheritance(modId, class, super, interfaces, methods) values (:modId,, :clazz, :superClass, :interfaces, :methods)")
+    void insert(@Bind("modId") int modId, @BindBean Iterable<InheritanceEntry> entries);
+
+    @SqlQuery("select distinct modId from inheritance")
+    List<Integer> getAllMods();
+
+    @SqlBatch("delete from inheritance where modId = :modId;")
+    void delete(@BindBean Iterable<Integer> pointers);
 }

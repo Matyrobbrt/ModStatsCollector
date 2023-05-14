@@ -7,6 +7,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.matyrobbrt.stats.collect.ModPointer;
 import cpw.mods.jarhandling.SecureJar;
 import io.github.matyrobbrt.curseforgeapi.CurseForgeAPI;
 import io.github.matyrobbrt.curseforgeapi.schemas.file.File;
@@ -32,13 +33,13 @@ public class ModCollector {
     private final CurseForgeAPI api;
 
     private final Set<String> jarJars = new HashSet<>();
-    private final Map<String, SecureJar> jars = new HashMap<>();
+    private final Map<ModPointer, SecureJar> jars = new HashMap<>();
 
     public ModCollector(CurseForgeAPI api) {
         this.api = api;
     }
 
-    public Map<String, SecureJar> getJarsToProcess() {
+    public Map<ModPointer, SecureJar> getJarsToProcess() {
         return jars;
     }
 
@@ -69,7 +70,7 @@ public class ModCollector {
     public void considerFile(File file) throws IOException {
         final Path downloaded = download(file);
         if (downloaded == null) return;
-        consider(SecureJar.from(downloaded));
+        consider(SecureJar.from(downloaded), new FilePointer(file.modId(), file.id()));
     }
 
     @Nullable
@@ -85,10 +86,14 @@ public class ModCollector {
         return path;
     }
 
-    public void consider(SecureJar jar) throws IOException {
+    public void consider(SecureJar jar, @Nullable FilePointer file) throws IOException {
         final String modId = getModId(jar);
         if (modId != null) {
-            jars.put(modId, jar);
+            if (file == null) {
+                jars.put(new ModPointer(modId), jar);
+            } else {
+                jars.put(new ModPointer(modId, file.projectID, file.fileID), jar);
+            }
         }
         collectJiJFrom(jar);
     }
@@ -108,7 +113,7 @@ public class ModCollector {
                 if (!jarJars.add(id)) continue;
 
                 final SecureJar jar = SecureJar.from(secureJar.getPath(obj.get("path").getAsString()));
-                consider(jar);
+                consider(jar, null);
             }
         }
     }

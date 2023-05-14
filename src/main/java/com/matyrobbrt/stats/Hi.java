@@ -1,18 +1,12 @@
 package com.matyrobbrt.stats;
 
-import com.google.common.reflect.TypeToken;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.therandomlabs.curseapi.CurseAPI;
-import com.therandomlabs.curseapi.game.CurseGame;
-import com.therandomlabs.curseapi.project.CurseSearchQuery;
-import com.therandomlabs.curseapi.project.CurseSearchSort;
 import io.github.matyrobbrt.curseforgeapi.CurseForgeAPI;
 import io.github.matyrobbrt.curseforgeapi.request.Method;
 import io.github.matyrobbrt.curseforgeapi.request.Request;
 import io.github.matyrobbrt.curseforgeapi.request.Requests;
 import io.github.matyrobbrt.curseforgeapi.request.query.ModSearchQuery;
-import io.github.matyrobbrt.curseforgeapi.schemas.file.File;
 import io.github.matyrobbrt.curseforgeapi.schemas.mod.Mod;
 import io.github.matyrobbrt.curseforgeapi.util.Utils;
 
@@ -37,17 +31,7 @@ public class Hi {
 //        );
 //
 //        System.out.println(res);
-        System.out.println(API.makeRequest(Requests.getMod(520914))
-                .get());
-
-        System.out.println(API.makeRequest(Requests.searchModsPaginated(ModSearchQuery.of(432)
-                .gameVersion("1.19.4")
-                .pageSize(1)
-                .sortField(ModSearchQuery.SortField.AUTHOR))));
-
-        // start: 31259
-        final var res = getMods(IntStream.range(238222, 238222 + 2000).toArray());
-        System.out.println(res);
+        System.out.println(API.makeRequest(Requests.getMod(829758)).orElseThrow());
     }
 
     public static Request<List<Mod>> getMods(int... modIds) {
