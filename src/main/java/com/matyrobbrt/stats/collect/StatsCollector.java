@@ -75,10 +75,11 @@ public class StatsCollector {
             thread.setDaemon(true);
             return thread;
         });
+        monitor.setNumberOfMods(jars.size());
         final List<Callable<Object>> callables = new ArrayList<>();
         for (final var entry : jars.entrySet()) {
             callables.add(() -> {
-                collect(jars.size(), entry.getKey().getModId(), entry.getValue(), rule, collectorFactory.apply(entry.getKey()), monitor);
+                collect(entry.getKey().getModId(), entry.getValue(), rule, collectorFactory.apply(entry.getKey()), monitor);
                 return null;
             });
         }
@@ -89,7 +90,8 @@ public class StatsCollector {
         }
     }
 
-    private static void collect(int total, String modId, SecureJar jar, CollectorRule rule, Collector collector, ProgressMonitor monitor) throws IOException {
+    private static void collect(String modId, SecureJar jar, CollectorRule rule, Collector collector, ProgressMonitor monitor) throws IOException {
+        monitor.startMod(modId);
         try (final Stream<Path> classes = Files.find(jar.getRootPath(), Integer.MAX_VALUE, (path, basicFileAttributes) -> path.getFileName().toString().endsWith(".class"))) {
             final ClassVisitor visitor = new ClassVisitor(Opcodes.ASM9) {
                 final ClassNode owner = new ClassNode();
@@ -187,7 +189,7 @@ public class StatsCollector {
             }
         }
         collector.commit();
-        monitor.completedMod(modId, total);
+        monitor.completedMod(modId);
     }
 
     public static final class ExitException extends RuntimeException {

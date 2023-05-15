@@ -1,5 +1,7 @@
 package com.matyrobbrt.stats.collect;
 
 public interface ProgressMonitor {
-    void completedMod(String id, int numberOfMods);
+    void setNumberOfMods(int numberOfMods);
+    void startMod(String id);
+    void completedMod(String id);
 }

@@ -4,6 +4,7 @@ import com.matyrobbrt.metabase.MetabaseClient;
 import com.matyrobbrt.metabase.params.DatabaseInclusion;
 import com.matyrobbrt.stats.collect.CollectorRule;
 import com.matyrobbrt.stats.collect.DefaultDBCollector;
+import com.matyrobbrt.stats.collect.ProgressMonitor;
 import com.matyrobbrt.stats.collect.StatsCollector;
 import com.matyrobbrt.stats.db.InheritanceDB;
 import com.matyrobbrt.stats.db.ModIDsDB;
@@ -59,7 +60,22 @@ public class Main {
                 jdbi.onDemand(RefsDB.class),
                 jdbi.onDemand(ModIDsDB.class),
                 (mid) -> new DefaultDBCollector(mid, jdbi, remapper, false),
-                (id, numberOfMods) -> {}
+                new ProgressMonitor() {
+                    @Override
+                    public void setNumberOfMods(int numberOfMods) {
+
+                    }
+
+                    @Override
+                    public void startMod(String id) {
+
+                    }
+
+                    @Override
+                    public void completedMod(String id) {
+
+                    }
+                }
         );
 
         final MetabaseClient client = new MetabaseClient(

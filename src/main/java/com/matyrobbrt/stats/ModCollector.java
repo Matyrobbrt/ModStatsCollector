@@ -44,7 +44,11 @@ public class ModCollector {
     }
 
     public void fromModpack(int packId, int fileId) throws CurseForgeException, IOException {
-        final Path modpackFile = download(api.getHelper().getModFile(packId, fileId).orElseThrow());
+        fromModpack(api.getHelper().getModFile(packId, fileId).orElseThrow());
+    }
+
+    public void fromModpack(File packFile) throws CurseForgeException, IOException {
+        final Path modpackFile = download(packFile);
         if (modpackFile == null) return;
 
         final Manifest mf;
