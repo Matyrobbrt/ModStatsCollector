@@ -44,7 +44,7 @@ public final class DefaultDBCollector implements Collector {
 
     @Override
     public void accept(String modId, ClassNode clazz) {
-        if (collectInheritance && !clazz.name.endsWith("package-info")) {
+        if (collectInheritance && !(clazz.name.endsWith("package-info") || clazz.name.endsWith("module-info"))) {
             inheritance.add(new InheritanceEntry(
                     clazz.name, clazz.superName,
                     clazz.interfaces, clazz.methods.stream()

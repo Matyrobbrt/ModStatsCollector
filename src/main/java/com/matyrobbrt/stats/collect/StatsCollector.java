@@ -188,8 +188,12 @@ public class StatsCollector {
                 }
             }
         }
-        collector.commit();
-        monitor.completedMod(modId);
+        try {
+            collector.commit();
+            monitor.completedMod(modId, null);
+        } catch (Exception exception) {
+            monitor.completedMod(modId, exception);
+        }
     }
 
     public static final class ExitException extends RuntimeException {

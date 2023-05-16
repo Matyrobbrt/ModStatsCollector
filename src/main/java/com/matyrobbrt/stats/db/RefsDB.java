@@ -19,5 +19,5 @@ public interface RefsDB extends Transactional<RefsDB> {
     List<Integer> getAllMods();
 
     @SqlBatch("delete from refs where modId = :modId;")
-    void delete(@BindBean Iterable<Integer> pointers);
+    void delete(@Bind("modId") Iterable<Integer> ids);
 }

@@ -1,7 +1,5 @@
 package com.matyrobbrt.stats;
 
-import com.matyrobbrt.metabase.MetabaseClient;
-import com.matyrobbrt.metabase.params.DatabaseInclusion;
 import com.matyrobbrt.stats.collect.CollectorRule;
 import com.matyrobbrt.stats.collect.DefaultDBCollector;
 import com.matyrobbrt.stats.collect.ProgressMonitor;
@@ -21,18 +19,13 @@ import org.jdbi.v3.core.argument.AbstractArgumentFactory;
 import org.jdbi.v3.core.argument.Argument;
 import org.jdbi.v3.core.config.ConfigRegistry;
 import org.jdbi.v3.sqlobject.SqlObjectPlugin;
-import org.objectweb.asm.tree.AbstractInsnNode;
-import org.objectweb.asm.tree.FieldInsnNode;
-import org.objectweb.asm.tree.LdcInsnNode;
-import org.objectweb.asm.tree.MethodInsnNode;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.UnaryOperator;
 
 public class Main {
 
@@ -41,7 +34,7 @@ public class Main {
             .build()).get();
 
     public static void main(String[] args) throws Exception {
-        final Jdbi jdbi = createDatabaseConnection("jeionly").getValue();
+        final Jdbi jdbi = createDatabaseConnection("inheritancetest").getValue();
 
         final ModCollector collector = new ModCollector(API);
 
@@ -59,7 +52,7 @@ public class Main {
                 jdbi.onDemand(InheritanceDB.class),
                 jdbi.onDemand(RefsDB.class),
                 jdbi.onDemand(ModIDsDB.class),
-                (mid) -> new DefaultDBCollector(mid, jdbi, remapper, false),
+                (mid) -> new DefaultDBCollector(mid, jdbi, remapper, true),
                 new ProgressMonitor() {
                     @Override
                     public void setNumberOfMods(int numberOfMods) {
@@ -78,33 +71,30 @@ public class Main {
                 }
         );
 
-        final MetabaseClient client = new MetabaseClient(
-                null,
-                null,
-                null
-        );
-        CompletableFuture.allOf(client.getDatabases(UnaryOperator.identity())
-                .thenApply(databases -> databases.stream().filter(db -> db.details().get("user").getAsString().equals(System.getenv("db.user"))))
-                .thenApply(db -> db.findFirst().orElseThrow())
-                .thenCompose(db -> db.syncSchema().thenCompose($ -> client.getDatabase(db.id(), p -> p.include(DatabaseInclusion.TABLES))))
-                .thenApply(db -> db.tables().stream().filter(tb -> tb.schema().equals("jeionly")))
-                .thenApply(tables -> tables.map(tb -> tb.update(p -> p.withDescription(switch (tb.name()) {
-                    case "refs" -> "References of fields, methods, classes and annotations";
-                    case "inheritance" -> "The class hierarchy of mods";
-                    default -> null;
-                }))).toArray(CompletableFuture[]::new)))
-                .join();
+//        final MetabaseClient client = new MetabaseClient(
+//                null,
+//                null,
+//                null
+//        );
+//        CompletableFuture.allOf(client.getDatabases(UnaryOperator.identity())
+//                .thenApply(databases -> databases.stream().filter(db -> db.details().get("user").getAsString().equals(System.getenv("db.user"))))
+//                .thenApply(db -> db.findFirst().orElseThrow())
+//                .thenCompose(db -> db.syncSchema().thenCompose($ -> client.getDatabase(db.id(), p -> p.include(DatabaseInclusion.TABLES))))
+//                .thenApply(db -> db.tables().stream().filter(tb -> tb.schema().equals("jeionly")))
+//                .thenApply(tables -> tables.map(tb -> tb.update(p -> p.withDescription(switch (tb.name()) {
+//                    case "refs" -> "References of fields, methods, classes and annotations";
+//                    case "inheritance" -> "The class hierarchy of mods";
+//                    default -> null;
+//                }))).toArray(CompletableFuture[]::new)))
+//                .join();
     }
 
     public static Map.Entry<MigrateResult, Jdbi> createDatabaseConnection(String schemaName) throws Exception {
-        final String user = System.getenv("db.user");
-        final String password = System.getenv("db.password");
-        final String url = System.getenv("db.url");
-        final Connection connection = DriverManager.getConnection(url + "?user=" + user + "&password=" + password);
+        final Connection connection = initiateDBConnection();
         connection.setSchema(schemaName);
 
         final var flyway = Flyway.configure()
-                .dataSource(url, user, password)
+                .dataSource(System.getenv("db.url"), System.getenv("db.user"), System.getenv("db.password"))
                 .locations("classpath:db")
                 .schemas(schemaName)
                 .load();
@@ -118,6 +108,13 @@ public class Main {
                     }
                 })
                 .installPlugin(new SqlObjectPlugin()));
+    }
+
+    public static Connection initiateDBConnection() throws SQLException {
+        final String user = System.getenv("db.user");
+        final String password = System.getenv("db.password");
+        final String url = System.getenv("db.url");
+        return DriverManager.getConnection(url + "?user=" + user + "&password=" + password);
     }
 
 }
