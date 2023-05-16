@@ -1,15 +1,18 @@
 package com.matyrobbrt.stats.db;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.util.List;
 
 public record InheritanceEntry(
-        String clazz, String superClass,
+        String clazz, @Nullable String superClass,
         List<String> interfaces, String[] methods
 ) {
     public String getClazz() {
         return clazz;
     }
 
+    @Nullable
     public String getSuperClass() {
         return superClass;
     }

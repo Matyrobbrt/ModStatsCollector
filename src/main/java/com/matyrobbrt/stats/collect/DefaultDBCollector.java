@@ -46,7 +46,7 @@ public final class DefaultDBCollector implements Collector {
     public void accept(String modId, ClassNode clazz) {
         if (collectInheritance && !(clazz.name.endsWith("package-info") || clazz.name.endsWith("module-info"))) {
             inheritance.add(new InheritanceEntry(
-                    clazz.name, clazz.superName,
+                    clazz.name, (clazz.superName == null || clazz.superName.equals("java/lang/Object")) ? null : clazz.superName,
                     clazz.interfaces, clazz.methods.stream()
                     .map(method -> remapper.remapMethod(method.name) + method.desc)
                     .toArray(String[]::new)

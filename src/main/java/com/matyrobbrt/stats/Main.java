@@ -65,7 +65,7 @@ public class Main {
                     }
 
                     @Override
-                    public void completedMod(String id) {
+                    public void completedMod(String id, Exception exception) {
 
                     }
                 }
