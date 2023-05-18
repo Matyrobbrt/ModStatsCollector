@@ -47,6 +47,7 @@ public record MetabaseTypeAdapterFactory(MetabaseClient client) implements TypeA
         for (java.lang.reflect.RecordComponent recordComponent : recordComponents) {
             typeMap.put(getName(recordComponent), TypeToken.get(recordComponent.getGenericType()));
         }
+        final boolean needsFull = typeMap.containsKey("_json");
 
         return new TypeAdapter<>() {
             @Override
@@ -69,6 +70,9 @@ public record MetabaseTypeAdapterFactory(MetabaseClient client) implements TypeA
                         } else {
                             reader.skipValue();
                         }
+                    }
+                    if (needsFull) {
+                        argsMap.put("_json", gson.toJsonTree(argsMap));
                     }
                     argsMap.put("client", client);
                     reader.endObject();

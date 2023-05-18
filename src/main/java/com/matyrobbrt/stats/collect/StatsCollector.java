@@ -16,6 +16,8 @@ import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,41 +39,44 @@ import java.util.stream.Stream;
 
 @SuppressWarnings("DuplicatedCode")
 public class StatsCollector {
-    public static void collect(Map<ModPointer, SecureJar> jars, CollectorRule rule, ProjectsDB projects, InheritanceDB inheritance, RefsDB refs, ModIDsDB modIDsDB, Function<ModPointer, Collector> collectorFactory, ProgressMonitor monitor) throws InterruptedException, ExecutionException {
+    public static final Logger LOGGER = LoggerFactory.getLogger(StatsCollector.class);
+
+    public static void collect(Map<ModPointer, SecureJar> jars, CollectorRule rule, ProjectsDB projects, InheritanceDB inheritance, RefsDB refs, ModIDsDB modIDsDB, Function<ModPointer, Collector> collectorFactory, ProgressMonitor monitor, boolean deleteOldData) throws InterruptedException, ExecutionException {
         jars.entrySet().removeIf(entry -> !rule.shouldCollect(entry.getKey().getModId()));
 
         projects.insert(0, 0); // Yay not null primary keys
 
-        final Set<ModPointer> keptMods = new HashSet<>(); // Mods in this set shall not be deleted initially because they will not be requeried
-        projects.useTransaction(transactional -> jars.keySet().removeIf(modPointer -> {
-            if (modPointer.getProjectId() == 0) return false;
-            final var oldFileId = transactional.getFileId(modPointer.getProjectId());
-            if (Objects.equals(oldFileId, modPointer.getFileId())) { // No need to re-calculate if we already did
-                keptMods.add(modPointer);
-                return true;
-            }
-            transactional.insert(modPointer.getProjectId(), modPointer.getFileId());
-            return false;
-        }));
+        if (deleteOldData) {
+            final Set<ModPointer> keptMods = new HashSet<>(); // Mods in this set shall not be deleted initially because they will not be requeried
+            projects.useTransaction(transactional -> jars.keySet().removeIf(modPointer -> {
+                if (modPointer.getProjectId() == 0) return false;
+                final var oldFileId = transactional.getFileId(modPointer.getProjectId());
+                if (Objects.equals(oldFileId, modPointer.getFileId())) { // No need to re-calculate if we already did
+                    keptMods.add(modPointer);
+                    return true;
+                }
+                transactional.insert(modPointer.getProjectId(), modPointer.getFileId());
+                return false;
+            }));
 
-        final Set<Integer> keptModsId = modIDsDB.inTransaction(transactional -> keptMods.stream()
-                .map(pointer -> transactional.get(pointer.getModId(), pointer.getProjectId()))
-                .collect(Collectors.toSet()));
-        inheritance.delete(inheritance.getAllMods().stream()
-                .filter(Predicate.not(keptModsId::contains))
-                .toList());
-        refs.delete(refs.getAllMods().stream()
-                .filter(Predicate.not(keptModsId::contains))
-                .toList());
-
-        System.out.println("Found " + jars.size() + " mods to recollect information on.");
+            final Set<Integer> keptModsId = modIDsDB.inTransaction(transactional -> keptMods.stream()
+                    .map(pointer -> transactional.get(pointer.getModId(), pointer.getProjectId()))
+                    .collect(Collectors.toSet()));
+            inheritance.delete(inheritance.getAllMods().stream()
+                    .filter(Predicate.not(keptModsId::contains))
+                    .toList());
+            refs.delete(refs.getAllMods().stream()
+                    .filter(Predicate.not(keptModsId::contains))
+                    .toList());
+        } else {
+            projects.insertAll(jars.keySet().stream().filter(
+                    it -> it.getProjectId() != 0
+            ).toList());
+        }
 
         final var executor = Executors.newFixedThreadPool(5, n -> {
             final Thread thread = new Thread(n);
-            thread.setUncaughtExceptionHandler((t, e) -> {
-                System.err.printf("Encountered exception collecting information: %s", e);
-                e.printStackTrace();
-            });
+            thread.setUncaughtExceptionHandler((t, e) -> LOGGER.error("Encountered exception collecting information: ", e));
             thread.setDaemon(true);
             return thread;
         });

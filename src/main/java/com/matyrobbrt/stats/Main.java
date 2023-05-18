@@ -68,7 +68,8 @@ public class Main {
                     public void completedMod(String id, Exception exception) {
 
                     }
-                }
+                },
+                true
         );
 
 //        final MetabaseClient client = new MetabaseClient(

@@ -2,8 +2,10 @@ package com.matyrobbrt.metabase;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.reflect.TypeToken;
 import com.matyrobbrt.metabase.params.UpdateParameters;
 
+import java.lang.reflect.Type;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -16,10 +18,14 @@ public record Route<T>(
         BiFunction<MetabaseClient, JsonElement, T> decoder
 ) {
     private static final Function<com.matyrobbrt.metabase.RequestParameters, JsonElement> NONE = r -> null;
-    private static final BiFunction<MetabaseClient, JsonElement, Void> VOID = (client, element) -> null;
+    public static final BiFunction<MetabaseClient, JsonElement, Void> VOID = (client, element) -> null;
 
     public static <T> Route<T> post(String path, Function<RequestParameters, JsonElement> body, BiFunction<MetabaseClient, JsonElement, T> decoder) {
         return new Route<>(path, RequestMethod.POST, body, decoder);
+    }
+
+    public static <T> Route<T> put(String path, Function<RequestParameters, JsonElement> body, BiFunction<MetabaseClient, JsonElement, T> decoder) {
+        return new Route<>(path, RequestMethod.PUT, body, decoder);
     }
 
     public static <T> Route<T> getEntityByID(String entityType, Class<T> type) {
@@ -65,4 +71,8 @@ public record Route<T>(
         );
     }
 
+    public static <T> BiFunction<MetabaseClient, JsonElement, T> decodeType(TypeToken<T> type) {
+        final Type actualType = type.getType();
+        return (client, element) -> client.gson.fromJson(element, actualType);
+    }
 }

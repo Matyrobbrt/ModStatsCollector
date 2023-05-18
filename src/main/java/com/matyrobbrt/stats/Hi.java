@@ -7,7 +7,10 @@ import io.github.matyrobbrt.curseforgeapi.request.Method;
 import io.github.matyrobbrt.curseforgeapi.request.Request;
 import io.github.matyrobbrt.curseforgeapi.request.Requests;
 import io.github.matyrobbrt.curseforgeapi.request.query.ModSearchQuery;
+import io.github.matyrobbrt.curseforgeapi.schemas.file.FileIndex;
 import io.github.matyrobbrt.curseforgeapi.schemas.mod.Mod;
+import io.github.matyrobbrt.curseforgeapi.schemas.mod.ModLoaderType;
+import io.github.matyrobbrt.curseforgeapi.util.Constants;
 import io.github.matyrobbrt.curseforgeapi.util.Utils;
 
 import java.util.List;
@@ -18,6 +21,23 @@ public class Hi {
         final CurseForgeAPI API = Utils.rethrowSupplier(() -> CurseForgeAPI.builder()
                 .apiKey(System.getenv("CF_TOKEN"))
                 .build()).get();
+
+        final var response = API.getHelper().searchModsPaginated(ModSearchQuery.of(Constants.GameIDs.MINECRAFT)
+                        .gameVersion("1.19.2")
+                        .sortField(ModSearchQuery.SortField.LAST_UPDATED)
+                        .sortOrder(ModSearchQuery.SortOrder.ASCENDENT)
+                        .modLoaderType(ModLoaderType.FORGE).classId(6)
+                        .pageSize(50).index(0))
+                .orElseThrow();
+        final var main = response.data().stream()
+                .flatMap(m -> m.latestFilesIndexes().stream().filter(f -> f.gameVersion().equals("1.19.2")).limit(1))
+                .toList();
+        System.out.println("Main Files: " + main.size());
+        System.out.println("Files: " + API.getHelper().getFiles(response.data().stream()
+                .flatMap(mod -> mod.latestFilesIndexes().stream()
+                        .filter(f -> f.gameVersion().equals("1.19.2") && f.modLoader() != null && f.modLoaderType() == ModLoaderType.FORGE)
+                        .limit(1)).mapToInt(FileIndex::fileId)
+                .toArray()).orElseThrow().size());
 
 //        final JsonObject jsonFull;
         https://www.curseforge.com/api/v1/mods/search?gameId=432&index=0&classId=6&pageSize=20&sortField=1&gameFlavors[0]=1
