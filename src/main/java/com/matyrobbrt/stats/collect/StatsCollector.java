@@ -29,6 +29,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -55,9 +56,13 @@ public class StatsCollector {
                 .uncaughtExceptionHandler((t, e) -> LOGGER.error("Encountered exception collecting information: ", e))
                 .name("stats-collector", 0).factory());
         monitor.setNumberOfMods(jars.size());
+
+        final Semaphore semaphore = new Semaphore(50);
         for (final var entry : jars.entrySet()) {
             executor.submit(() -> {
+                semaphore.acquire();
                 collect(entry.getKey().getModId(), entry.getValue(), rule, collectorFactory.apply(entry.getKey()), monitor);
+                semaphore.release();
                 return null;
             });
         }

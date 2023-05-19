@@ -61,9 +61,6 @@ public class Database {
     }
 
     public static Map.Entry<MigrateResult, Jdbi> createDatabaseConnection(String schemaName) throws Exception {
-        final Connection connection = initiateDBConnection();
-        connection.setSchema(schemaName);
-
         final var flyway = Flyway.configure()
                 .dataSource(System.getProperty("db.url"), System.getProperty("db.user"), System.getProperty("db.password"))
                 .locations("classpath:db")
@@ -71,7 +68,11 @@ public class Database {
                 .load();
         final var result = flyway.migrate();
 
-        return Map.entry(result, Jdbi.create(connection)
+        return Map.entry(result, Jdbi.create(() -> {
+                    final Connection connection = initiateDBConnection();
+                    connection.setSchema(schemaName);
+                    return connection;
+                })
                 .registerArgument(new AbstractArgumentFactory<AtomicInteger>(Types.INTEGER) {
                     @Override
                     protected Argument build(AtomicInteger value, ConfigRegistry config) {

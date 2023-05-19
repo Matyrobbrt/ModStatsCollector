@@ -78,20 +78,18 @@ public final class DefaultDBCollector implements Collector {
 
     @Override
     public void commit() {
-        synchronized (jdbi) {
-            if (mod.getProjectId() != 0) {
-                jdbi.useExtension(ProjectsDB.class, db -> db.insert(mod.getProjectId(), mod.getFileId()));
-            }
-            final int id = jdbi.withExtension(ModIDsDB.class, db -> db.get(mod.getModId(), mod.getProjectId()));
-            jdbi.useExtension(RefsDB.class, d -> {
-                d.delete(id);
-                d.insert(id, count.keySet(), count.values());
-            });
-            jdbi.useExtension(InheritanceDB.class, db -> {
-                db.delete(id);
-                db.insert(id, inheritance);
-            });
+        if (mod.getProjectId() != 0) {
+            jdbi.useExtension(ProjectsDB.class, db -> db.insert(mod.getProjectId(), mod.getFileId()));
         }
+        final int id = jdbi.withExtension(ModIDsDB.class, db -> db.get(mod.getModId(), mod.getProjectId()));
+        jdbi.useExtension(RefsDB.class, d -> {
+            d.delete(id);
+            d.insert(id, count.keySet(), count.values());
+        });
+        jdbi.useExtension(InheritanceDB.class, db -> {
+            db.delete(id);
+            db.insert(id, inheritance);
+        });
     }
 
     private String formatAnnotation(Object owner, AnnotationNode annotationNode) {
