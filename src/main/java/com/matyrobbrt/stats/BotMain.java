@@ -45,6 +45,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -53,6 +54,7 @@ import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -67,10 +69,13 @@ public class BotMain {
     private static final Logger LOGGER = LoggerFactory.getLogger(BotMain.class);
 
     private static final CurseForgeAPI CF = Utils.rethrowSupplier(() -> CurseForgeAPI.builder()
-            .apiKey(System.getenv("CF_TOKEN"))
+            .apiKey(System.getProperty("curseforge.token"))
             .build()).get();
 
     private static final MetabaseClient METABASE = new MetabaseClient(
+            System.getProperty("metabase.url"),
+            System.getProperty("metabase.user"),
+            System.getProperty("metabase.password")
     );
 
     private static final SavedTrackedData<Set<Integer>> PACKS = new SavedTrackedData<>(
@@ -86,7 +91,16 @@ public class BotMain {
     private static JDA jda;
 
     public static void main(String[] args) throws Exception {
-        jda = JDABuilder.create(System.getenv("BOT_TOKEN"), EnumSet.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGES))
+        final Path propsPath = Path.of("bot.properties");
+        if (Files.exists(propsPath)) {
+            final Properties props = new Properties();
+            try (final var reader = Files.newBufferedReader(propsPath)) {
+                props.load(reader);
+            }
+            props.forEach((o, o2) -> System.setProperty(o.toString(), o2.toString()));
+        }
+
+        jda = JDABuilder.create(System.getProperty("bot.token"), EnumSet.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGES))
                 .addEventListeners((EventListener) gevent -> {
                     if (!(gevent instanceof ReadyEvent event)) return;
 
@@ -217,7 +231,7 @@ public class BotMain {
             }
             projects.insert(pack.id(), mainFile.id());
 
-            final Message logging = jda.getChannelById(MessageChannel.class, System.getenv("LOGGING_CHANNEL"))
+            final Message logging = jda.getChannelById(MessageChannel.class, System.getProperty("bot.loggingChannel"))
                             .sendMessage("Status of collection of statistics of **" + pack.name() + "**, file ID: " + mainFile.id())
                             .complete();
             LOGGER.info("Found new file ({}) for pack {}: started stats collection.", mainFile.id(), pack.id());
@@ -292,7 +306,7 @@ public class BotMain {
             LOGGER.info("Found no new mods to collect stats on for game version {}.", gameVersion);
         }
 
-        final Message logging = jda.getChannelById(MessageChannel.class, System.getenv("LOGGING_CHANNEL"))
+        final Message logging = jda.getChannelById(MessageChannel.class, System.getProperty("bot.loggingChannel"))
                 .sendMessage("Status of collection of statistics for game version '"+ gameVersion + "'")
                 .complete();
         LOGGER.info("Started stats collection for game version '{}'. Found {} mods to scan.", gameVersion, newMods.size());
@@ -327,8 +341,12 @@ public class BotMain {
     }
 
     private static void updateMetabase(String schemaName) {
+        final String[] fullUrl = System.getProperty("db.url").substring("jdbc:postgresql://".length()).split("/", 2);
+
         CompletableFuture.allOf(METABASE.getDatabases(UnaryOperator.identity())
-                .thenApply(databases -> databases.stream().filter(db -> db.details().get("user").getAsString().equals(System.getenv("db.user")))) // TODO - check host
+                .thenApply(databases -> databases.stream().filter(db -> db.details().get("user").getAsString().equals(System.getenv("db.user"))
+                        && db.details().get("host").getAsString().equals(fullUrl[0])
+                        && db.details().get("dbname").getAsString().equals(fullUrl[1])))
                 .thenApply(db -> db.findFirst().orElseThrow())
                 .thenCompose(db -> db.syncSchema().thenCompose($ -> METABASE.getDatabase(db.id(), p -> p.include(DatabaseInclusion.TABLES_AND_FIELDS))))
                 .thenApply(db -> db.tables().stream().filter(tb -> tb.schema().equals(schemaName)).toList())

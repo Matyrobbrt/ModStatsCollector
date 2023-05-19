@@ -71,23 +71,6 @@ public class Main {
                 },
                 true
         );
-
-//        final MetabaseClient client = new MetabaseClient(
-//                null,
-//                null,
-//                null
-//        );
-//        CompletableFuture.allOf(client.getDatabases(UnaryOperator.identity())
-//                .thenApply(databases -> databases.stream().filter(db -> db.details().get("user").getAsString().equals(System.getenv("db.user"))))
-//                .thenApply(db -> db.findFirst().orElseThrow())
-//                .thenCompose(db -> db.syncSchema().thenCompose($ -> client.getDatabase(db.id(), p -> p.include(DatabaseInclusion.TABLES))))
-//                .thenApply(db -> db.tables().stream().filter(tb -> tb.schema().equals("jeionly")))
-//                .thenApply(tables -> tables.map(tb -> tb.update(p -> p.withDescription(switch (tb.name()) {
-//                    case "refs" -> "References of fields, methods, classes and annotations";
-//                    case "inheritance" -> "The class hierarchy of mods";
-//                    default -> null;
-//                }))).toArray(CompletableFuture[]::new)))
-//                .join();
     }
 
     public static Map.Entry<MigrateResult, Jdbi> createDatabaseConnection(String schemaName) throws Exception {
@@ -95,7 +78,7 @@ public class Main {
         connection.setSchema(schemaName);
 
         final var flyway = Flyway.configure()
-                .dataSource(System.getenv("db.url"), System.getenv("db.user"), System.getenv("db.password"))
+                .dataSource(System.getProperty("db.url"), System.getProperty("db.user"), System.getProperty("db.password"))
                 .locations("classpath:db")
                 .schemas(schemaName)
                 .load();
@@ -112,9 +95,9 @@ public class Main {
     }
 
     public static Connection initiateDBConnection() throws SQLException {
-        final String user = System.getenv("db.user");
-        final String password = System.getenv("db.password");
-        final String url = System.getenv("db.url");
+        final String user = System.getProperty("db.user");
+        final String password = System.getProperty("db.password");
+        final String url = System.getProperty("db.url");
         return DriverManager.getConnection(url + "?user=" + user + "&password=" + password);
     }
 

@@ -22,25 +22,37 @@ public class Hi {
                 .apiKey(System.getenv("CF_TOKEN"))
                 .build()).get();
 
-        final var response = API.getHelper().searchModsPaginated(ModSearchQuery.of(Constants.GameIDs.MINECRAFT)
+        final var res = API.getHelper().searchModsPaginated(ModSearchQuery.of(Constants.GameIDs.MINECRAFT)
                         .gameVersion("1.19.2")
                         .sortField(ModSearchQuery.SortField.LAST_UPDATED)
                         .sortOrder(ModSearchQuery.SortOrder.ASCENDENT)
                         .modLoaderType(ModLoaderType.FORGE).classId(6)
                         .pageSize(50).index(0))
                 .orElseThrow();
-        final var main = response.data().stream()
-                .flatMap(m -> m.latestFilesIndexes().stream().filter(f -> f.gameVersion().equals("1.19.2")).limit(1))
-                .toList();
-        System.out.println("Main Files: " + main.size());
-        System.out.println("Files: " + API.getHelper().getFiles(response.data().stream()
-                .flatMap(mod -> mod.latestFilesIndexes().stream()
-                        .filter(f -> f.gameVersion().equals("1.19.2") && f.modLoader() != null && f.modLoaderType() == ModLoaderType.FORGE)
-                        .limit(1)).mapToInt(FileIndex::fileId)
-                .toArray()).orElseThrow().size());
+
+        System.out.println(res.data().stream()
+                .flatMap(m -> m.latestFilesIndexes().stream().filter(f -> f.gameVersion().equals("1.19.2") && f.modLoader() != null && (f.modLoaderType() == ModLoaderType.FORGE)).limit(1))
+                .count());
+
+//        final var response = API.getHelper().searchModsPaginated(ModSearchQuery.of(Constants.GameIDs.MINECRAFT)
+//                        .gameVersion("1.19.2")
+//                        .sortField(ModSearchQuery.SortField.LAST_UPDATED)
+//                        .sortOrder(ModSearchQuery.SortOrder.ASCENDENT)
+//                        .modLoaderType(ModLoaderType.FORGE).classId(6)
+//                        .pageSize(50).index(0))
+//                .orElseThrow();
+//        final var main = response.data().stream()
+//                .flatMap(m -> m.latestFilesIndexes().stream().filter(f -> f.gameVersion().equals("1.19.2")).limit(1))
+//                .toList();
+//        System.out.println("Main Files: " + main.size());
+//        System.out.println("Files: " + API.getHelper().getFiles(response.data().stream()
+//                .flatMap(mod -> mod.latestFilesIndexes().stream()
+//                        .filter(f -> f.gameVersion().equals("1.19.2") && f.modLoader() != null && f.modLoaderType() == ModLoaderType.FORGE)
+//                        .limit(1)).mapToInt(FileIndex::fileId)
+//                .toArray()).orElseThrow().size());
 
 //        final JsonObject jsonFull;
-        https://www.curseforge.com/api/v1/mods/search?gameId=432&index=0&classId=6&pageSize=20&sortField=1&gameFlavors[0]=1
+        //https://www.curseforge.com/api/v1/mods/search?gameId=432&index=0&classId=6&pageSize=20&sortField=1&gameFlavors[0]=1
 //        try (final var is = new URL("https://www.curseforge.com/api/v1/mods/search?gameId=432&index=0&classId=6&pageSize=20&sortField=5").openStream()) {
 //            jsonFull = API.getGson().fromJson(new InputStreamReader(is), JsonObject.class);
 //        }
@@ -51,7 +63,6 @@ public class Hi {
 //        );
 //
 //        System.out.println(res);
-        System.out.println(API.makeRequest(Requests.getMod(829758)).orElseThrow());
     }
 
     public static Request<List<Mod>> getMods(int... modIds) {
