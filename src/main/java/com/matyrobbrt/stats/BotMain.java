@@ -102,7 +102,12 @@ public class BotMain {
     private static JDA jda;
 
     public static void main(String[] args) throws Exception {
-        final ExecutorService rescanner = Executors.newFixedThreadPool(3);
+        final ExecutorService rescanner = Executors.newFixedThreadPool(3, r -> {
+            final Thread thread = new Thread(r, "Stats scanner");
+            thread.setDaemon(true);
+            thread.setUncaughtExceptionHandler((t, e) -> LOGGER.error("Encountered exception on scanner thread: ", e));
+            return thread;
+        });
 
         jda = JDABuilder.create(System.getProperty("bot.token"), EnumSet.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGES))
                 .addEventListeners((EventListener) gevent -> {
@@ -298,7 +303,6 @@ public class BotMain {
                 LOGGER.trace("Pack {} is up-to-date.", pack.id());
                 return;
             }
-            projects.insert(pack.id(), mainFile.id());
 
             final Message logging = jda.getChannelById(MessageChannel.class, System.getProperty("bot.loggingChannel"))
                             .sendMessage("Status of collection of statistics of **" + pack.name() + "**, file ID: " + mainFile.id())
@@ -329,9 +333,9 @@ public class BotMain {
 
             LOGGER.info("Finished stats collection of pack {}", pack.id());
             CURRENTLY_COLLECTED.remove(String.valueOf(pack.id()));
+            projects.insert(pack.id(), mainFile.id());
         } catch (Exception ex) {
-            System.out.println(ex.getMessage());
-            ex.printStackTrace();
+            LOGGER.error("Encountered exception collecting stats of pack: ", ex);
         }
     }
 

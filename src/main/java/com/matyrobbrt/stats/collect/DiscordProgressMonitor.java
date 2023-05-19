@@ -50,6 +50,7 @@ public class DiscordProgressMonitor implements ProgressMonitor {
 
             while (true) {
                 if (System.currentTimeMillis() - last.get() < monitoringInterval) continue;
+                last.set(System.currentTimeMillis());
 
                 final int num = numberOfMods.get();
                 if (num == -1) continue; // We haven't started yet

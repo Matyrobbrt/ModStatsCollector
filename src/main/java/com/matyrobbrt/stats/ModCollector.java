@@ -60,9 +60,10 @@ public class ModCollector {
             }
         }
 
-        for (final File file : api.getHelper()
+        final List<File> files = api.getHelper()
                 .getFiles(mf.files.stream().mapToInt(FilePointer::fileID).toArray())
-                .orElseThrow()) {
+                .orElseThrow();
+        for (final File file : files) {
             considerFile(file);
         }
     }

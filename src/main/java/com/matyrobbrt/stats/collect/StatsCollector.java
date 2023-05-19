@@ -22,14 +22,11 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
@@ -54,25 +51,17 @@ public class StatsCollector {
             return Objects.equals(oldFileId, modPointer.getFileId());
         }));
 
-        final var executor = Executors.newFixedThreadPool(5, n -> {
-            final Thread thread = new Thread(n);
-            thread.setUncaughtExceptionHandler((t, e) -> LOGGER.error("Encountered exception collecting information: ", e));
-            thread.setDaemon(true);
-            return thread;
-        });
+        final var executor = Executors.newThreadPerTaskExecutor(Thread.ofVirtual()
+                .uncaughtExceptionHandler((t, e) -> LOGGER.error("Encountered exception collecting information: ", e))
+                .name("stats-collector", 0).factory());
         monitor.setNumberOfMods(jars.size());
-        final List<Callable<Object>> callables = new ArrayList<>();
         for (final var entry : jars.entrySet()) {
-            callables.add(() -> {
+            executor.submit(() -> {
                 collect(entry.getKey().getModId(), entry.getValue(), rule, collectorFactory.apply(entry.getKey()), monitor);
                 return null;
             });
         }
-
-        final var futures = executor.invokeAll(callables);
-        for (final var future : futures) {
-            future.get();
-        }
+        executor.close();
 
         if (deleteOldData) {
             final Set<Integer> keptModsId = modIDsDB.inTransaction(transactional -> toKeep.stream()
