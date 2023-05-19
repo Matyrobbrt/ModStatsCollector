@@ -3,6 +3,7 @@ package com.matyrobbrt.stats.collect;
 import com.matyrobbrt.stats.db.InheritanceDB;
 import com.matyrobbrt.stats.db.InheritanceEntry;
 import com.matyrobbrt.stats.db.ModIDsDB;
+import com.matyrobbrt.stats.db.ProjectsDB;
 import com.matyrobbrt.stats.db.Reference;
 import com.matyrobbrt.stats.db.RefsDB;
 import com.matyrobbrt.stats.db.Type;
@@ -48,8 +49,8 @@ public final class DefaultDBCollector implements Collector {
             inheritance.add(new InheritanceEntry(
                     clazz.name, (clazz.superName == null || clazz.superName.equals("java/lang/Object")) ? null : clazz.superName,
                     clazz.interfaces, clazz.methods.stream()
-                    .map(method -> remapper.remapMethod(method.name) + method.desc)
-                    .toArray(String[]::new)
+                        .map(method -> remapper.remapMethod(method.name) + method.desc)
+                        .toArray(String[]::new)
             ));
         }
     }
@@ -78,9 +79,18 @@ public final class DefaultDBCollector implements Collector {
     @Override
     public void commit() {
         synchronized (jdbi) {
+            if (mod.getProjectId() != 0) {
+                jdbi.useExtension(ProjectsDB.class, db -> db.insert(mod.getProjectId(), mod.getFileId()));
+            }
             final int id = jdbi.withExtension(ModIDsDB.class, db -> db.get(mod.getModId(), mod.getProjectId()));
-            jdbi.useExtension(RefsDB.class, d -> d.insert(id, count.keySet(), count.values()));
-            jdbi.useExtension(InheritanceDB.class, db -> db.insert(id, inheritance));
+            jdbi.useExtension(RefsDB.class, d -> {
+                d.delete(id);
+                d.insert(id, count.keySet(), count.values());
+            });
+            jdbi.useExtension(InheritanceDB.class, db -> {
+                db.delete(id);
+                db.insert(id, inheritance);
+            });
         }
     }
 

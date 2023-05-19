@@ -6,6 +6,7 @@ import com.matyrobbrt.metabase.types.Field;
 public class FieldUpdateParameters implements UpdateParameters {
     private final Field source;
     private Field target;
+    private FieldValues fieldValues;
 
     public FieldUpdateParameters(Field source) {
         this.source = source;
@@ -16,11 +17,19 @@ public class FieldUpdateParameters implements UpdateParameters {
         return this;
     }
 
+    public FieldUpdateParameters withFieldValues(FieldValues values) {
+        this.fieldValues = values;
+        return this;
+    }
+
     @Override
     public JsonObject compile() {
         final JsonObject update = source._json().deepCopy();
         if (target != null) {
             update.add("target", target._json().deepCopy());
+        }
+        if (fieldValues != null) {
+            update.addProperty("has_field_values", fieldValues.toString());
         }
         return update;
     }

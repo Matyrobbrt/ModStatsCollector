@@ -3,9 +3,6 @@ package com.matyrobbrt.stats;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.matyrobbrt.metabase.MetabaseClient;
-import com.matyrobbrt.metabase.params.DatabaseInclusion;
-import com.matyrobbrt.metabase.types.Field;
-import com.matyrobbrt.metabase.types.Table;
 import com.matyrobbrt.stats.collect.CollectorRule;
 import com.matyrobbrt.stats.collect.DefaultDBCollector;
 import com.matyrobbrt.stats.collect.DiscordProgressMonitor;
@@ -56,17 +53,29 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 
 public class BotMain {
     private static final Logger LOGGER = LoggerFactory.getLogger(BotMain.class);
+
+    static {
+        final Path propsPath = Path.of("bot.properties");
+        if (Files.exists(propsPath)) {
+            final Properties props = new Properties();
+            try (final var reader = Files.newBufferedReader(propsPath)) {
+                props.load(reader);
+            } catch (Exception ex) {
+                LOGGER.error("Could not read properties:", ex);
+            }
+            props.forEach((o, o2) -> System.setProperty(o.toString(), o2.toString()));
+        }
+    }
+
 
     private static final CurseForgeAPI CF = Utils.rethrowSupplier(() -> CurseForgeAPI.builder()
             .apiKey(System.getProperty("curseforge.token"))
@@ -88,35 +97,40 @@ public class BotMain {
             HashSet::new, Path.of("data/game_versions.json")
     );
 
+    private static final Set<String> CURRENTLY_COLLECTED = new CopyOnWriteArraySet<>();
+
     private static JDA jda;
 
     public static void main(String[] args) throws Exception {
-        final Path propsPath = Path.of("bot.properties");
-        if (Files.exists(propsPath)) {
-            final Properties props = new Properties();
-            try (final var reader = Files.newBufferedReader(propsPath)) {
-                props.load(reader);
-            }
-            props.forEach((o, o2) -> System.setProperty(o.toString(), o2.toString()));
-        }
+        final ExecutorService rescanner = Executors.newFixedThreadPool(3);
 
         jda = JDABuilder.create(System.getProperty("bot.token"), EnumSet.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGES))
                 .addEventListeners((EventListener) gevent -> {
                     if (!(gevent instanceof ReadyEvent event)) return;
 
                     event.getJDA().updateCommands()
-                            .addCommands(Commands.slash("modpacks", "Command used to manage collection of stats in modpacks")
-                                    .addSubcommands(new SubcommandData("add", "Collect stats from the given modpack")
-                                            .addOption(OptionType.INTEGER, "modpack", "The ID of the modpack to collect stats from", true))
-                                    .addSubcommands(new SubcommandData("list", "List all watched modpacks"))
-                                    .addSubcommands(new SubcommandData("remove", "Remove a modpack from stats collection")
-                                            .addOption(OptionType.INTEGER, "modpack", "The ID of the modpack to remove", true)
-                                            .addOption(OptionType.BOOLEAN, "removedb", "Whether to remove the modpack from the database", true)))
+                            .addCommands(
+                                    Commands.slash("modpacks", "Command used to manage collection of stats in modpacks")
+                                            .addSubcommands(new SubcommandData("add", "Collect stats from the given modpack")
+                                                    .addOption(OptionType.INTEGER, "modpack", "The ID of the modpack to collect stats from", true))
+                                            .addSubcommands(new SubcommandData("list", "List all watched modpacks"))
+                                            .addSubcommands(new SubcommandData("remove", "Remove a modpack from stats collection")
+                                                    .addOption(OptionType.INTEGER, "modpack", "The ID of the modpack to remove", true)
+                                                    .addOption(OptionType.BOOLEAN, "removedb", "Whether to remove the modpack from the database", true)),
+
+                                    Commands.slash("gameversion", "Command used to manage collection of stats for specific game versions")
+                                            .addSubcommands(new SubcommandData("add", "Watch a game version")
+                                                    .addOption(OptionType.STRING, "version", "The game version to watch", true))
+                                            .addSubcommands(new SubcommandData("list", "List all watched game versions"))
+                                            .addSubcommands(new SubcommandData("remove", "Un-watch a game version")
+                                                    .addOption(OptionType.INTEGER, "version", "The game version to remove", true)
+                                                    .addOption(OptionType.BOOLEAN, "removedb", "Whether to remove the game version from the database", true)))
                             .queue();
                 }, (EventListener) gevent -> {
                     if (!(gevent instanceof SlashCommandInteractionEvent event)) return;
+
                     try {
-                        onSlashCommandInteraction(event);
+                        onSlashCommandInteraction(event, rescanner);
                     } catch (Exception ex) {
                         event.getHook().sendMessage("Encountered exception executing command: " + ex).queue();
                     }
@@ -124,32 +138,32 @@ public class BotMain {
                 .build()
                 .awaitReady();
 
-        final ExecutorService rescanner = Executors.newFixedThreadPool(3);
         final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
         scheduler.scheduleAtFixedRate(() -> {
             try {
                 for (final Mod mod : CF.makeRequest(getMods(PACKS.read())).orElseThrow()) {
+                    if (!CURRENTLY_COLLECTED.add(String.valueOf(mod.id()))) return;
                     rescanner.submit(() -> trigger(mod));
                 }
             } catch (CurseForgeException e) {
-                throw new RuntimeException(e);
+                LOGGER.error("Encountered error initiating pack stats collection:", e);
             }
-        }, 1, 1, TimeUnit.HOURS);
+        }, 2, 60, TimeUnit.MINUTES);
 
         scheduler.scheduleAtFixedRate(() -> {
             for (final String version : GAME_VERSIONS.read()) {
+                if (!CURRENTLY_COLLECTED.add(version)) return;
+
                 rescanner.submit(() -> {
                     try {
                         triggerGameVersion(version);
                     } catch (Exception ex) {
-                        System.out.println(ex.getMessage());
-                        ex.printStackTrace();
+                        LOGGER.error("Encountered exception collecting statistics for game version '{}':", version, ex);
                     }
                 });
             }
-        // }, 1, 1, TimeUnit.DAYS);
-        }, 1, 30, TimeUnit.MINUTES);
+         }, 0, 1, TimeUnit.DAYS);
     }
 
     public static Request<List<Mod>> getMods(Iterable<Integer> modIds) {
@@ -162,7 +176,7 @@ public class BotMain {
         return new Request<>("/v1/mods", Method.POST, body, "data", Requests.Types.MOD_LIST);
     }
 
-    public static void onSlashCommandInteraction(final SlashCommandInteractionEvent event) throws Exception {
+    public static void onSlashCommandInteraction(final SlashCommandInteractionEvent event, final ExecutorService rescanner) throws Exception {
         switch (event.getFullCommandName()) {
             case "modpacks add" -> {
                 final Mod pack = CF.makeRequest(Requests.getMod(event.getOption("modpack", 0, OptionMapping::getAsInt))).orElse(null);
@@ -172,12 +186,13 @@ public class BotMain {
                 }
 
                 event.reply("Watching modpack. Started indexing, please wait...").queue();
-                ForkJoinPool.commonPool().submit(() -> {
+
+                CURRENTLY_COLLECTED.add(String.valueOf(pack.id()));
+                PACKS.useHandle(v -> v.add(pack.id()));
+                rescanner.submit(() -> {
                     trigger(pack);
 
                     event.getHook().editOriginal("Finished initial indexing.").queue();
-
-                    PACKS.useHandle(packs -> packs.add(pack.id()));
                 });
             }
             case "modpacks list" -> { // TODO - make better
@@ -195,13 +210,14 @@ public class BotMain {
                 final int packId = event.getOption("modpack", 0, OptionMapping::getAsInt);
                 if (!packs.contains(packId)) {
                     event.reply("Unknown pack!").setEphemeral(true).queue();
+                    return;
                 }
 
                 packs.remove(packId);
                 PACKS.write();
 
                 if (event.getOption("removedb", false, OptionMapping::getAsBoolean)) {
-                    try (final var con = Main.initiateDBConnection()) {
+                    try (final var con = Database.initiateDBConnection()) {
                         try (final var stmt = con.createStatement()) {
                             stmt.execute("drop schema if exists pack_" + packId + " cascade;");
                         }
@@ -209,15 +225,68 @@ public class BotMain {
                 }
                 event.reply("Pack removed!").queue();
             }
+
+
+            case "gameversion add" -> {
+                final String gameVersion = event.getOption("version", "", OptionMapping::getAsString);
+                if (CF.getHelper().getGameVersions(Constants.GameIDs.MINECRAFT).orElse(List.of())
+                        .stream().flatMap(g -> g.versions().stream())
+                        .noneMatch(s -> s.equals(gameVersion))) {
+                    event.reply("Unknown game version!").setEphemeral(true).queue();
+                    return;
+                }
+
+                event.reply("Watching game version. Started indexing, please wait...").queue();
+                CURRENTLY_COLLECTED.add(gameVersion);
+                GAME_VERSIONS.useHandle(v -> v.add(gameVersion));
+                rescanner.submit(() -> {
+                    try {
+                        triggerGameVersion(gameVersion);
+                    } catch (Exception ex) {
+                        System.out.println(ex.getMessage());
+                        ex.printStackTrace();
+                    }
+                });
+            }
+            case "gameversion list" -> { // TODO - make better
+                GAME_VERSIONS.useHandle(versions -> {
+                    if (versions.isEmpty()) {
+                        event.reply("No game versions watched!").queue();
+                    } else {
+                        event.reply(versions.stream().map(String::valueOf).collect(Collectors.joining(", "))).queue();
+                    }
+                });
+            }
+
+            case "gameversion remove" -> {
+                final var versions = GAME_VERSIONS.read();
+                final String versionID = event.getOption("version", "", OptionMapping::getAsString);
+                if (!versions.contains(versionID)) {
+                    event.reply("Unknown game version!").setEphemeral(true).queue();
+                    return;
+                }
+
+                versions.remove(versionID);
+                GAME_VERSIONS.write();
+
+                if (event.getOption("removedb", false, OptionMapping::getAsBoolean)) {
+                    try (final var con = Database.initiateDBConnection()) {
+                        try (final var stmt = con.createStatement()) {
+                            stmt.execute("drop schema if exists " + computeVersionSchema(versionID) + " cascade;");
+                        }
+                    }
+                }
+                event.reply("Game version removed!").queue();
+            }
         }
     }
 
     private static void trigger(Mod pack) {
         try {
             final String schemaName = "pack_" + pack.id();
-            final var connection = Main.createDatabaseConnection(schemaName);
+            final var connection = Database.createDatabaseConnection(schemaName);
             if (connection.getKey().initialSchemaVersion == null) { // Schema was created
-                updateMetabase(schemaName);
+                Database.updateMetabase(METABASE, schemaName);
             }
 
             final Jdbi jdbi = connection.getValue();
@@ -259,6 +328,7 @@ public class BotMain {
             );
 
             LOGGER.info("Finished stats collection of pack {}", pack.id());
+            CURRENTLY_COLLECTED.remove(String.valueOf(pack.id()));
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
             ex.printStackTrace();
@@ -266,10 +336,10 @@ public class BotMain {
     }
 
     private static void triggerGameVersion(String gameVersion) throws Exception {
-        final String schemaName = "gv_" + gameVersion.replace('.', '_').replace('-', '_');
-        final var connection = Main.createDatabaseConnection(schemaName);
+        final String schemaName = computeVersionSchema(gameVersion);
+        final var connection = Database.createDatabaseConnection(schemaName);
         if (connection.getKey().initialSchemaVersion == null) { // Schema was created
-            updateMetabase(schemaName);
+            Database.updateMetabase(METABASE, schemaName);
         }
 
         final Jdbi jdbi = connection.getValue();
@@ -280,15 +350,18 @@ public class BotMain {
         final List<FileIndex> newMods = new ArrayList<>();
         int idx = 0;
         int maxItems = 10_000;
-//        while (page * 50 < maxItems) {
-        while (idx < 50) {
+
+        modsquery:
+        while (idx < maxItems) {
             final var response = CF.getHelper().searchModsPaginated(ModSearchQuery.of(Constants.GameIDs.MINECRAFT)
                     .gameVersion(gameVersion).classId(6) // We're interested in mods
                     .sortField(ModSearchQuery.SortField.LAST_UPDATED)
                     .sortOrder(ModSearchQuery.SortOrder.ASCENDENT)
                     .modLoaderType(ModLoaderType.FORGE)
                     .pageSize(50).index(idx))
-                    .orElseThrow();
+                    .orElse(null);
+            if (response == null) break;
+
             idx = response.pagination().index() + 50;
             maxItems = Math.min(response.pagination().resultCount(), 10000);
             for (final Mod mod : response.data()) {
@@ -297,13 +370,14 @@ public class BotMain {
                         .limit(1)
                         .findFirst().orElse(null);
                 if (matching == null) continue;
-                if (fileIds.contains(matching.fileId())) break;
+                if (fileIds.contains(matching.fileId())) break modsquery;
                 newMods.add(matching);
             }
         }
 
         if (newMods.isEmpty()) {
             LOGGER.info("Found no new mods to collect stats on for game version {}.", gameVersion);
+            return;
         }
 
         final Message logging = jda.getChannelById(MessageChannel.class, System.getProperty("bot.loggingChannel"))
@@ -335,45 +409,14 @@ public class BotMain {
                 (mid) -> new DefaultDBCollector(mid, jdbi, remapper, true),
                 progressMonitor,
                 false
-        );
+        ); // Delete data of deleted mods every week or so
 
         LOGGER.info("Finished stats collection for game version '{}'", gameVersion);
+        CURRENTLY_COLLECTED.remove(gameVersion);
     }
 
-    private static void updateMetabase(String schemaName) {
-        final String[] fullUrl = System.getProperty("db.url").substring("jdbc:postgresql://".length()).split("/", 2);
-
-        CompletableFuture.allOf(METABASE.getDatabases(UnaryOperator.identity())
-                .thenApply(databases -> databases.stream().filter(db -> db.details().get("user").getAsString().equals(System.getenv("db.user"))
-                        && db.details().get("host").getAsString().equals(fullUrl[0])
-                        && db.details().get("dbname").getAsString().equals(fullUrl[1])))
-                .thenApply(db -> db.findFirst().orElseThrow())
-                .thenCompose(db -> db.syncSchema().thenCompose($ -> METABASE.getDatabase(db.id(), p -> p.include(DatabaseInclusion.TABLES_AND_FIELDS))))
-                .thenApply(db -> db.tables().stream().filter(tb -> tb.schema().equals(schemaName)).toList())
-                .thenCompose(tbs -> CompletableFuture.allOf(tbs.stream().map(tb -> {
-                    if (tb.name().equals("flyway_schema_history")) {
-                        return tb.setHidden(true);
-                    } else {
-                        return tb.update(p -> switch (tb.name()) {
-                            case "refs" -> p.withDisplayName("References")
-                                    .withDescription("References of fields, methods, classes and annotations");
-                            case "inheritance" -> p.withDescription("The class hierarchy of mods");
-                            case "projects" ->
-                                    p.withDescription("The IDs of the projects that are tracked by this schema");
-                            case "modids" -> p.withDisplayName("Mod IDs")
-                                    .withDescription("A mapping of text mod IDs to integers in order to save space");
-                            default -> null;
-                        });
-                    }
-                }).toArray(CompletableFuture[]::new)).thenApply($ -> tbs))
-                .thenCompose(tbs -> {
-                    final Table modids = tbs.stream().filter(tb -> tb.name().equals("modids")).findFirst().orElseThrow();
-                    final Field target = modids.fields().stream().filter(f -> f.name().equals("modid")).findFirst().orElseThrow();
-                    return CompletableFuture.allOf(tbs.stream().filter(tb -> tb.name().equals("inheritance") || tb.name().equals("refs"))
-                            .map(tb -> tb.fields().stream().filter(f -> f.name().equals("modid")).findFirst().orElseThrow()
-                                    .update(u -> u.setTarget(target))
-                                    .thenCompose(f -> f.setDimension(target.id(), target.displayName())))
-                            .toArray(CompletableFuture[]::new));
-                }));
+    private static String computeVersionSchema(String version) {
+        return "gv_" + version.replace('.', '_').replace('-', '_');
     }
+
 }

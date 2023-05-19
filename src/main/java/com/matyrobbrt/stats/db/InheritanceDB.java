@@ -4,6 +4,7 @@ import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindBean;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
+import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.sqlobject.transaction.Transactional;
 
 import java.util.List;
@@ -14,6 +15,9 @@ public interface InheritanceDB extends Transactional<InheritanceDB> {
 
     @SqlQuery("select distinct modId from inheritance")
     List<Integer> getAllMods();
+
+    @SqlUpdate("delete from inheritance where modId = :modId;")
+    void delete(@Bind("modId") int modId);
 
     @SqlBatch("delete from inheritance where modId = :modId;")
     void delete(@Bind("modId") Iterable<Integer> ids);

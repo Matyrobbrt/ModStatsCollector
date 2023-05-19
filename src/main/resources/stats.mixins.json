@@ -1,9 +1,0 @@
-{
-  "required": true,
-  "package": "com.matyrobbrt.stats.mixin",
-  "compatibilityLevel": "JAVA_17",
-  "refmap": "stats.refmap.json",
-  "mixins": [],
-  "client": [],
-  "minVersion": "0.8.5"
-}

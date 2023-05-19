@@ -46,33 +46,13 @@ public class StatsCollector {
 
         projects.insert(0, 0); // Yay not null primary keys
 
-        if (deleteOldData) {
-            final Set<ModPointer> keptMods = new HashSet<>(); // Mods in this set shall not be deleted initially because they will not be requeried
-            projects.useTransaction(transactional -> jars.keySet().removeIf(modPointer -> {
-                if (modPointer.getProjectId() == 0) return false;
-                final var oldFileId = transactional.getFileId(modPointer.getProjectId());
-                if (Objects.equals(oldFileId, modPointer.getFileId())) { // No need to re-calculate if we already did
-                    keptMods.add(modPointer);
-                    return true;
-                }
-                transactional.insert(modPointer.getProjectId(), modPointer.getFileId());
-                return false;
-            }));
-
-            final Set<Integer> keptModsId = modIDsDB.inTransaction(transactional -> keptMods.stream()
-                    .map(pointer -> transactional.get(pointer.getModId(), pointer.getProjectId()))
-                    .collect(Collectors.toSet()));
-            inheritance.delete(inheritance.getAllMods().stream()
-                    .filter(Predicate.not(keptModsId::contains))
-                    .toList());
-            refs.delete(refs.getAllMods().stream()
-                    .filter(Predicate.not(keptModsId::contains))
-                    .toList());
-        } else {
-            projects.insertAll(jars.keySet().stream().filter(
-                    it -> it.getProjectId() != 0
-            ).toList());
-        }
+        final Set<ModPointer> toKeep = new HashSet<>(jars.keySet());
+        projects.useTransaction(transactional -> jars.keySet().removeIf(modPointer -> {
+            if (modPointer.getProjectId() == 0) return false;
+            final Integer oldFileId = transactional.getFileId(modPointer.getProjectId());
+            // No need to re-calculate if we already did
+            return Objects.equals(oldFileId, modPointer.getFileId());
+        }));
 
         final var executor = Executors.newFixedThreadPool(5, n -> {
             final Thread thread = new Thread(n);
@@ -92,6 +72,18 @@ public class StatsCollector {
         final var futures = executor.invokeAll(callables);
         for (final var future : futures) {
             future.get();
+        }
+
+        if (deleteOldData) {
+            final Set<Integer> keptModsId = modIDsDB.inTransaction(transactional -> toKeep.stream()
+                    .map(pointer -> transactional.get(pointer.getModId(), pointer.getProjectId()))
+                    .collect(Collectors.toSet()));
+            inheritance.delete(inheritance.getAllMods().stream()
+                    .filter(Predicate.not(keptModsId::contains))
+                    .toList());
+            refs.delete(refs.getAllMods().stream()
+                    .filter(Predicate.not(keptModsId::contains))
+                    .toList());
         }
     }
 
