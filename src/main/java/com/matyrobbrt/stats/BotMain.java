@@ -109,7 +109,7 @@ public class BotMain {
             return thread;
         });
 
-        jda = JDABuilder.create(System.getProperty("bot.token"), EnumSet.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGES))
+        jda = JDABuilder.createLight(System.getProperty("bot.token"), EnumSet.of(GatewayIntent.MESSAGE_CONTENT, GatewayIntent.GUILD_MESSAGES))
                 .addEventListeners((EventListener) gevent -> {
                     if (!(gevent instanceof ReadyEvent event)) return;
 
@@ -367,7 +367,7 @@ public class BotMain {
             if (response == null) break;
 
             idx = response.pagination().index() + 50;
-            maxItems = Math.min(response.pagination().resultCount(), 10000);
+            maxItems = Math.min(response.pagination().totalCount(), 10000);
             for (final Mod mod : response.data()) {
                 final FileIndex matching = mod.latestFilesIndexes().stream()
                         .filter(f -> f.gameVersion().equals(gameVersion) && f.modLoader() != null && f.modLoaderType() == ModLoaderType.FORGE)

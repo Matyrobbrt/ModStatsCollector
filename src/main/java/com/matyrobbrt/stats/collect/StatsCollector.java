@@ -4,6 +4,7 @@ import com.matyrobbrt.stats.db.InheritanceDB;
 import com.matyrobbrt.stats.db.ModIDsDB;
 import com.matyrobbrt.stats.db.ProjectsDB;
 import com.matyrobbrt.stats.db.RefsDB;
+import com.matyrobbrt.stats.util.SemaphoreGroup;
 import cpw.mods.jarhandling.SecureJar;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
@@ -38,6 +39,7 @@ import java.util.stream.Stream;
 @SuppressWarnings("DuplicatedCode")
 public class StatsCollector {
     public static final Logger LOGGER = LoggerFactory.getLogger(StatsCollector.class);
+    private static final SemaphoreGroup SEMAPHORES = new SemaphoreGroup(Integer.parseInt(System.getProperty("indexing.max_threads", "50")));
 
     public static void collect(Map<ModPointer, SecureJar> jars, CollectorRule rule, ProjectsDB projects, InheritanceDB inheritance, RefsDB refs, ModIDsDB modIDsDB, Function<ModPointer, Collector> collectorFactory, ProgressMonitor monitor, boolean deleteOldData) throws InterruptedException, ExecutionException {
         jars.entrySet().removeIf(entry -> !rule.shouldCollect(entry.getKey().getModId()));
@@ -57,16 +59,23 @@ public class StatsCollector {
                 .name("stats-collector", 0).factory());
         monitor.setNumberOfMods(jars.size());
 
-        final Semaphore semaphore = new Semaphore(50);
+        final Semaphore semaphore = SEMAPHORES.acquireNew(jars.size());
         for (final var entry : jars.entrySet()) {
             executor.submit(() -> {
                 semaphore.acquire();
-                collect(entry.getKey().getModId(), entry.getValue(), rule, collectorFactory.apply(entry.getKey()), monitor);
-                semaphore.release();
+                try {
+                    collect(entry.getKey().getModId(), entry.getValue(), rule, collectorFactory.apply(entry.getKey()), monitor);
+                } finally {
+                    semaphore.release();
+                }
                 return null;
             });
         }
-        executor.close();
+        try {
+            executor.close();
+        } finally {
+            SEMAPHORES.release(semaphore);
+        }
 
         if (deleteOldData) {
             final Set<Integer> keptModsId = modIDsDB.inTransaction(transactional -> toKeep.stream()

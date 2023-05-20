@@ -62,7 +62,7 @@ public class Database {
 
     public static Map.Entry<MigrateResult, Jdbi> createDatabaseConnection(String schemaName) throws Exception {
         final var flyway = Flyway.configure()
-                .dataSource(System.getProperty("db.url"), System.getProperty("db.user"), System.getProperty("db.password"))
+                .dataSource(System.getProperty("db.url") + "?socketTimeout=0&tcpKeepAlive=true&options=-c%20statement_timeout=1h", System.getProperty("db.user"), System.getProperty("db.password"))
                 .locations("classpath:db")
                 .schemas(schemaName)
                 .load();
